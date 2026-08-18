@@ -11,6 +11,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 import json
 from tavily import TavilyClient
+from langgraph.graph import END, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
+
 
 load_dotenv()
 tavily_client = TavilyClient(
@@ -25,8 +28,6 @@ llm = ChatOpenAI(
     model="gemma-4-e4b-it",
     temperature=0,
 )
-
-
 
 analyzer_prompt = ChatPromptTemplate.from_messages(
     [
@@ -219,6 +220,13 @@ revisor_prompt = ChatPromptTemplate.from_messages(
 valid_categories = ["Positive", "Neutral", "Problematic"]
 moderation_statuses = ["Pending", "Approve", "Remove", "Edit"]
 
+checkpointer = InMemorySaver()
+config = {
+    "configurable": {
+        "thread_id": "mod-1"
+    }
+}
+
 # `AgentState` is the shared "working memory" passed between LangGraph nodes,
 # with each agent reading fields from it and returning only the fields it changes
 class AgentState(TypedDict, total=False):
@@ -238,6 +246,7 @@ class AgentState(TypedDict, total=False):
         "Edit"
     ]
     final_justification: str
+    human_approval: bool
 
 test_init_state: AgentState = {
     "original_comment": "This course sucks!!",
@@ -373,63 +382,87 @@ def use_agent_revisor(state: AgentState) -> AgentState:
         "final_justification": result["final_justification"]
     }
 
+def approve_without_policy(state: AgentState) -> AgentState:
+    return {
+        "moderation_status": "Approve",
+        "final_justification": (
+            "No potential community-policy violation was detected."
+        ),
+    }
+
+def route_after_analysis(state: AgentState) -> str:
+    if state["problem_detected"]:
+        return "policy_checker"
+
+    return "approve"
+
+def execute_final_action(state: AgentState) -> AgentState:
+    if state["human_approval"]:
+        print("Final action approved by human moderator.")
+
+        return {
+            "final_justification": (
+                f"Human moderator approved the recommendation. "
+                f"{state['final_justification']}"
+            ),
+        }
+
+    print("Final action canceled by human moderator.")
+
+    return {
+        "moderation_status": "Pending",
+        "final_justification": (
+            "The human moderator canceled the recommended action."
+        ),
+    }
+
+#          Estado inicial
+#                ↓
+#            Analyzer
+#                ↓
+#       Decisão de roteamento
+#        ↙               ↘
+#     Approve       Policy Checker
+#                         ↓
+#                      Reviewer
+#                         ↓
+#             [human approval checkpoint]
+#                         ↓
+#                execute_final_action
+#                         ↓
+#                        END
+builder = StateGraph(AgentState)
+
+builder.add_node("analyzer", use_agent_analyzer)
+builder.add_node("policy_checker", use_agent_policy_checker)
+builder.add_node("revisor", use_agent_revisor)
+builder.add_node("approve", approve_without_policy)
+builder.add_node("execute_final_action", execute_final_action)
+
+builder.set_entry_point("analyzer")
+
+builder.add_conditional_edges(
+    "analyzer",
+    route_after_analysis,
+    {
+        "policy_checker": "policy_checker",
+        "approve": "approve",
+    },
+)
+
+builder.add_edge("policy_checker", "revisor")
+builder.add_edge("revisor", "execute_final_action")
+builder.add_edge("approve", "execute_final_action")
+builder.add_edge("execute_final_action", END)
+
+checkpointer = InMemorySaver()
+
+graph = builder.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["execute_final_action"],
+)
 
 # ---------------------------------- Testing Grounds -----------------------------------
-
-# # Right here I'm testing if the agent can successfully determine whether a comment 
-# # is positive, neutral, or problematic. The agent should return a JSON object with 
-# # the category and a brief analysis of the comment.
-
-# good_state: AgentState = {
-#     "original_comment": "The course was helpful.",
-#     "moderation_status": "Pending",
-# }
-# bad_state: AgentState = {
-#     "original_comment": "The instructor is a worthless idiot.",
-#     "moderation_status": "Pending",
-# }
-# updates = use_agent_analyzer(good_state)
-# print(updates)
-# updates = use_agent_analyzer(bad_state)
-# print(updates)
-
-# ----------------------------------------------------------------------------------------
-
-# # `include_answer=False` requests search results rather than a Tavily-generated summary.
-
-# search_response = tavily_client.search(
-#     query=(
-#         "online learning platform community guidelines "
-#         "harassment and personal attacks"
-#     ),
-#     search_depth="basic",
-#     max_results=3,
-#     include_answer=False,
-# )
-
-# # A Tavily response is roughtly structured like this:
-# # {
-# #     "query": "...",
-# #     "results": [
-# #         {
-# #             "title": "...",
-# #             "url": "...",
-# #             "content": "...",
-# #             "score": 0.87,
-# #         }
-# #     ]
-# # }
-# #
-# # Remember! The "score" represents how relevant Tavily considers that search result 
-# # to your query.
-
-# for result in search_response["results"]:
-#     print(result["title"])
-#     print(result["url"])
-#     print(result["content"])
-#     print()
-
-# ----------------------------------------------------------------------------------------
 
 good_state: AgentState = {
     "original_comment": "The course was helpful.",
@@ -440,30 +473,47 @@ bad_state: AgentState = {
     "moderation_status": "Pending",
 }
 
-analysis_updates = use_agent_analyzer(bad_state)
+if __name__ == "__main__":
+    config = {
+        "configurable": {
+            "thread_id": "moderation-001"
+        }
+    }
 
-analyzed_state: AgentState = {
-    **bad_state,
-    **analysis_updates,
-}
+    for event in graph.stream(
+        bad_state,
+        config=config,
+        stream_mode="values",
+    ):
+        print(event)
 
-policy_updates = use_agent_policy_checker(analyzed_state)
+    paused_state = graph.get_state(config)
 
-policy_checked_state: AgentState = {
-    **bad_state,
-    **analysis_updates,
-    **policy_updates
-}
+    if "execute_final_action" in paused_state.next:
+        print("\nAgent analysis:")
+        print(paused_state.values.get("agent_analysis"))
+        print("\nModeration recommendation:")
+        print(paused_state.values.get("moderation_status"))
 
-revisor_updates = use_agent_revisor(policy_checked_state)
+        human_answer = input(
+            "\nConfirm the recommended action? Type 'sim' or 'não': "
+        ).strip().lower()
 
-revised_state: AgentState = {
-    **bad_state,
-    **analysis_updates,
-    **policy_updates,
-    **revisor_updates
-}
+        while human_answer not in {"sim", "não"}:
+            human_answer = input(
+                "Please type only 'sim' or 'não': "
+            ).strip().lower()
 
-print(analysis_updates)
-print(policy_updates)
-print(revisor_updates)
+        graph.update_state(
+            config,
+            {
+                "human_approval": human_answer == "sim"
+            },
+        )
+
+        for event in graph.stream(
+            None,
+            config=config,
+            stream_mode="values",
+        ):
+            print(event)
