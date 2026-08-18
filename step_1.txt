@@ -1,0 +1,13 @@
+Nesta primeira etapa, você construirá a fundação do seu sistema multi-agente. O foco é definir os papéis de cada agente, o estado compartilhado que eles manipularão e as conexões iniciais entre eles no grafo.
+
+Requisitos:
+
+1. Defina o AgentState: Crie uma classe TypedDict que representará o estado do fluxo. Ela deve conter, no mínimo, os seguintes campos: comentario_original, politicas_relevantes, analise_do_agente, status_da_moderacao e justificativa_final.
+
+2. Crie os Agentes (Nós do Grafo):
+
+- Agente Analisador: Um nó que recebe o comentario_original e gera uma analise_do_agente, identificando se o texto é positivo, neutro ou potencialmente problemático (ex: spam, ofensivo, etc.).
+- Agente Pesquisador de Políticas: Um nó que, caso a análise aponte um problema, usa a ferramenta de busca (Tavily) para encontrar as politicas_relevantes nas diretrizes da comunidade (você pode simular essas diretrizes em um texto simples) que se aplicam ao caso.
+- Agente Revisor: Um nó que consolida a analise_do_agente e as politicas_relevantes para gerar uma recomendação de ação (ex: "Aprovar", "Remover por Spam", "Editar por linguagem inadequada").
+
+3. Construa o Grafo: Utilize o StateGraph para adicionar os nós que você criou. Conecte-os com arestas (add_edge) e defina o planner como ponto de entrada (set_entry_point). Crie uma aresta condicional (add_conditional_edges) que, após a análise do Agente Analisador, direcione o fluxo para o Agente Pesquisador de Políticas apenas se um problema for detectado, caso contrário, finalize o fluxo com o status "Aprovado".

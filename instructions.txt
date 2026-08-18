@@ -1,0 +1,11 @@
+Você é um desenvolvedor de IA encarregado de criar um sistema inteligente para auxiliar na moderação de comentários em uma plataforma de cursos online. O volume de comentários é muito alto, e um moderador humano precisa de ajuda para escalar o trabalho, garantindo que as discussões sejam saudáveis e construtivas, sem violar as políticas da comunidade.
+
+O objetivo é construir um fluxo de trabalho com múltiplos agentes de IA usando LangGraph que:
+
+1. Analisa um novo comentário de um aluno.
+2. Pesquisa as diretrizes da comunidade para verificar se há alguma violação.
+3. Sinaliza comentários potencialmente problemáticos.
+4. Envolve um moderador humano (Human in the Loop) para tomar a decisão final de aprovar, remover ou editar o comentário.
+5. Permite que o moderador humano não apenas aprove, mas também edite a sugestão do agente ou forneça uma justificativa diferente, intervindo diretamente no estado do agente.
+
+Este projeto irá consolidar seus conhecimentos em orquestração de agentes, gerenciamento de estado e a implementação de pontos de controle cruciais para a intervenção humana.

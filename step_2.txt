@@ -1,0 +1,8 @@
+Com o fluxo de agentes montado, o próximo passo é introduzir a primeira forma de Human in the Loop: a aprovação manual. O sistema irá pausar e esperar a decisão de um moderador humano antes de executar uma ação crítica.
+
+Requisitos:
+
+1. Modifique a Compilação do Grafo: Ao compilar seu grafo (graph.compile()), adicione o parâmetro interrupt_before. Configure-o para pausar o sistema imediatamente antes do nó que executaria a ação final (por exemplo, um nó chamado executar_acao_final que você ainda criará).
+2. Capture a Interrupção: Escreva o código que invoca o grafo (graph.stream()) e, no loop de eventos, verifique quando o agente está pausado aguardando intervenção.
+3. Solicite a Entrada Humana: Quando a execução pausar, imprima a análise e a recomendação do Agente Revisor no console e peça ao usuário (o moderador humano) para digitar "sim" para confirmar a ação ou "não" para cancelar.
+4. Retome a Execução: Com base na resposta do usuário, continue a execução do grafo para que ele siga para o estado final apropriado.
