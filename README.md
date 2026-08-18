@@ -1,3 +1,8 @@
+---
+title: Alura AI Engineer Checkpoint 1
+sdk: static
+---
+
 # Agentic Comment Moderation
 
 An educational project for learning how to build agentic AI workflows with
