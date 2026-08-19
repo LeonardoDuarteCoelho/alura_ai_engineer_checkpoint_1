@@ -1,0 +1,9 @@
+Esta é a etapa mais avançada, onde você implementará a capacidade do moderador de não apenas aprovar, mas de intervir e alterar o estado do agente, forçando uma resposta ou justificativa específica.
+
+Requisitos:
+
+1. Capture o Snapshot do Estado: No ponto de interrupção, em vez de apenas pedir "sim" ou "não", use o método graph.get_state(config) para obter um "snapshot" completo do estado atual do agente.
+2. Permita a Modificação da Resposta: Apresente ao moderador a recomendação do agente e ofereça a opção de escrever uma nova justificativa_final. Por exemplo, se o agente sugeriu "Remover por Spam", o moderador poderia intervir e escrever "Removido por conter link externo não autorizado, conforme política X".
+3. Injete a Nova Informação: Crie uma nova mensagem (AIMessage ou atualize o campo no estado) com a justificativa fornecida pelo moderador.
+4. Atualize o Estado do Grafo: Utilize o método graph.update_state(config, new_values) para substituir o estado pausado pela nova versão que contém a intervenção humana.
+5. Finalize o Fluxo: Continue a execução do grafo a partir do estado modificado para registrar a ação final.

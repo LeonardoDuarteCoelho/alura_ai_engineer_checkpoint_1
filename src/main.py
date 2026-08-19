@@ -349,6 +349,23 @@ def use_agent_policy_checker(state: AgentState) -> AgentState:
         "relevant_policies": result["relevant_policies"]
     }
 
+# JSON LLM input:
+#
+# {
+#     "comment": "The instructor is a worthless idiot.",
+#     "category": "Problematic",
+#     "analysis": "The comment contains personal attacks and abusive language.",
+#     "policies": "- Personal attacks and harassment are prohibited."
+# }
+#
+# JSON LLM output:
+#
+# {
+#     "moderation_status": "Remove",
+#     "final_justification": (
+#         "The comment contains a personal attack and violates the supplied policies."
+#     )
+# }
 def use_agent_revisor(state: AgentState) -> AgentState:
     comment  = state["original_comment"]
     analysis = state["agent_analysis"]
@@ -399,21 +416,14 @@ def route_after_analysis(state: AgentState) -> str:
 def execute_final_action(state: AgentState) -> AgentState:
     if state["human_approval"]:
         print("Final action approved by human moderator.")
+        print(f"Final justification: {state['final_justification']}")
 
-        return {
-            "final_justification": (
-                f"Human moderator approved the recommendation. "
-                f"{state['final_justification']}"
-            ),
-        }
+        return state
 
     print("Final action canceled by human moderator.")
 
     return {
         "moderation_status": "Pending",
-        "final_justification": (
-            "The human moderator canceled the recommended action."
-        ),
     }
 
 #          Estado inicial
@@ -431,6 +441,7 @@ def execute_final_action(state: AgentState) -> AgentState:
 #                execute_final_action
 #                         ↓
 #                        END
+#
 builder = StateGraph(AgentState)
 
 builder.add_node("analyzer", use_agent_analyzer)
@@ -487,6 +498,8 @@ if __name__ == "__main__":
     ):
         print(event)
 
+    # The graph is paused before execute_final_action. Capture the full
+    # snapshot so the human moderator can inspect and modify the state.
     paused_state = graph.get_state(config)
 
     if "execute_final_action" in paused_state.next:
@@ -494,23 +507,39 @@ if __name__ == "__main__":
         print(paused_state.values.get("agent_analysis"))
         print("\nModeration recommendation:")
         print(paused_state.values.get("moderation_status"))
+        print("\nCurrent final justification:")
+        print(paused_state.values.get("final_justification"))
 
         human_answer = input(
-            "\nConfirm the recommended action? Type 'sim' or 'não': "
+            "\nConfirm the recommended action? Type 'yes' or 'no': "
         ).strip().lower()
 
-        while human_answer not in {"sim", "não"}:
+        while human_answer not in {"yes", "no"}:
             human_answer = input(
-                "Please type only 'sim' or 'não': "
+                "Please type only 'yes' or 'no': "
             ).strip().lower()
 
+        # The moderator may replace the agent's final justification.
+        new_justification = input(
+            "Enter a new final justification or press Enter to keep the current one: "
+        ).strip()
+
+        if not new_justification:
+            new_justification = paused_state.values.get(
+                "final_justification",
+                "",
+            )
+
+        # Save the human intervention in the paused graph state.
         graph.update_state(
             config,
             {
-                "human_approval": human_answer == "sim"
+                "human_approval": human_answer == "yes",
+                "final_justification": new_justification,
             },
         )
 
+        # Resume the graph from the modified checkpoint.
         for event in graph.stream(
             None,
             config=config,

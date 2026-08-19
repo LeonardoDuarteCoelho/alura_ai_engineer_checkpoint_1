@@ -35,6 +35,7 @@ The project focuses on understanding:
 - External tool use through Tavily
 - Conditional graph routing
 - Checkpointing and human-in-the-loop interruptions
+- Human modification of the graph state
 
 ## Current implementation
 
@@ -45,9 +46,10 @@ The current code in `src/main.py` contains:
 - A Tavily-based Policy Checker
 - A Reviewer that produces a moderation recommendation
 - JSON parsing and basic output validation
+- A LangGraph workflow with conditional routing
+- Human approval and moderator-edited final justifications
 
-The LangGraph construction and human-in-the-loop execution are the next stages
-of the project.
+The three planned stages are now implemented in the current prototype.
 
 ## Technologies
 
@@ -56,7 +58,7 @@ of the project.
 - LangGraph
 - LM Studio with an OpenAI-compatible local API
 - Tavily Search API
-- SQLite checkpointing (planned for the graph stage)
+- In-memory checkpointing with `InMemorySaver`
 
 ## Installation
 
@@ -89,7 +91,9 @@ Start the LM Studio server, make sure a model is available, and run:
 ```
 
 The current test case sends a problematic comment through the Analyzer, Policy
-Checker, and Reviewer, then prints the state updates returned by each agent.
+Checker, and Reviewer. The graph then pauses before the final action, displays
+the recommendation to a human moderator, allows the final justification to be
+edited, and resumes after the moderator's decision.
 
 ## Project structure
 
@@ -101,6 +105,7 @@ checkpoint_1/
 |-- instructions.txt     # Overall project brief
 |-- step_1.txt           # Initial agent workflow requirements
 |-- step_2.txt           # Human-in-the-loop requirements
+|-- step_3.txt           # Human state intervention requirements
 `-- README.md
 ```
 
